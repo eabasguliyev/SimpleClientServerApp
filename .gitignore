@@ -1,0 +1,7 @@
+.vs
+Client/bin
+Client/obj
+Protocols/obj
+Protocols/bin
+Server/obj
+Server/bin
