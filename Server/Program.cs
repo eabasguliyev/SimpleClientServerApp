@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Mime;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Protocols;
 
@@ -22,7 +23,13 @@ namespace Server
             IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse(ipAddress), port);
 
             using Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            
+            SqlConnection conn = new SqlConnection();
 
+            conn.ConnectionString =
+                "Data Source=STHQ0125-18;Initial Catalog=CarsDatabase;User ID=admin;Password=admin;";
+
+            conn.Open();
 
             try
             {
@@ -37,85 +44,82 @@ namespace Server
                 {
                     var handler = socket.Accept();
 
-                    var strBuilder = new StringBuilder();
-
-                    byte[] dataBuffer = new byte[256];
-
-                    int count = 0;
-
-                    do
-                    {
-                        count = handler.Receive(dataBuffer);
-
-                        strBuilder.Append(Encoding.UTF8.GetString(dataBuffer, 0, count));
-                    } while (handler.Available > 0);
-
-
-
-                    var protocol = JsonConvert.DeserializeObject<CommandProtocol>(strBuilder.ToString());
-
-                    Console.WriteLine(protocol.SelectionMode);
-                    Console.WriteLine(protocol.Query);
-
-                    // get result with ado.net
-
-                    SqlConnection conn = new SqlConnection();
-
-                    conn.ConnectionString =
-                        "Data Source=condor\\SQLExpress;Initial Catalog=FavoriteMoviesDb;Integrated Security=True;";
-
-                    conn.Open();
-
-                    var command = conn.CreateCommand();
-
-                    command.CommandText = protocol.Query;
-
-                    if (protocol.SelectionMode)
-                    {
-                        var reader = command.ExecuteReader();
-
-                        var response = new ResponseProtocol();
-
-
-                        var columnNames = new Row();
-
-                        for (int i = 0, length = reader.FieldCount; i < length; i++)
+                    Task.Run(()=> {
+                        while (true)
                         {
+                            var strBuilder = new StringBuilder();
 
-                            columnNames.Fields.Add(reader.GetName(i));
-                        }
+                            byte[] dataBuffer = new byte[256];
 
-                        response.Rows.Add(columnNames);
+                            int count = 0;
 
-                        while (reader.Read())
-                        {
-                            var row = new Row();
-
-                            for (int i = 0, length = reader.FieldCount; i < length; i++)
+                            do
                             {
-                                row.Fields.Add(reader.GetValue(i));
+                                count = handler.Receive(dataBuffer);
+
+                                strBuilder.Append(Encoding.UTF8.GetString(dataBuffer, 0, count));
+                            } while (handler.Available > 0);
+
+
+
+                            var protocol = JsonConvert.DeserializeObject<CommandProtocol>(strBuilder.ToString());
+
+                            Console.WriteLine(protocol.SelectionMode);
+                            Console.WriteLine(protocol.Query);
+
+                            // get result with ado.net
+
+                          
+                            var command = conn.CreateCommand();
+
+                            command.CommandText = protocol.Query;
+
+                            if (protocol.SelectionMode)
+                            {
+                                var reader = command.ExecuteReader();
+
+                                var response = new ResponseProtocol();
+
+
+                                var columnNames = new Row();
+
+                                for (int i = 0, length = reader.FieldCount; i < length; i++)
+                                {
+
+                                    columnNames.Fields.Add(reader.GetName(i));
+                                }
+
+                                response.Rows.Add(columnNames);
+
+                                while (reader.Read())
+                                {
+                                    var row = new Row();
+
+                                    for (int i = 0, length = reader.FieldCount; i < length; i++)
+                                    {
+                                        row.Fields.Add(reader.GetValue(i));
+                                    }
+
+                                    response.Rows.Add(row);
+                                }
+
+                                reader.Close();
+
+
+                                var jsonStr = JsonConvert.SerializeObject(response);
+
+                                handler.Send(Encoding.UTF8.GetBytes(jsonStr));
                             }
+                            else
+                            {
+                                command.ExecuteNonQuery();
 
-                            response.Rows.Add(row);
+                                handler.Send(Encoding.UTF8.GetBytes("Query Executed"));
+                            }
                         }
+                    });
 
-
-                        var jsonStr = JsonConvert.SerializeObject(response);
-
-                        handler.Send(Encoding.UTF8.GetBytes(jsonStr));
-                    }
-                    else
-                    {
-                        command.ExecuteNonQuery();
-
-                        handler.Send(Encoding.UTF8.GetBytes("Query Executed"));
-                    }
-
-                    conn.Close();
-
-                    Console.WriteLine("Done");
-                    handler.Shutdown(SocketShutdown.Both);
-                    handler.Close();
+                   
                 }
 
             }

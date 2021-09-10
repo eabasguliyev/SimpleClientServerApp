@@ -24,9 +24,10 @@ namespace Client
             {
                 var isContinue = true;
 
+                socket.Connect(endPoint);
+
                 while (isContinue)
                 {
-                    socket.Connect(endPoint);
 
                     var strBuilder = new StringBuilder();
 
@@ -80,16 +81,19 @@ namespace Client
 
                     isContinue = Console.ReadLine()[0] == 'y';
 
-                    socket.Shutdown(SocketShutdown.Both);
-                    socket.Disconnect(true);
+             
                 }
                 
-                socket.Close();
             }
             catch (Exception ex)
             {
 
                 Console.WriteLine($"Handled exception: {ex.Message}");
+            }
+            finally
+            {
+                socket.Shutdown(SocketShutdown.Both);
+                socket.Close();
             }
         }
     }
