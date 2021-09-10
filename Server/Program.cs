@@ -15,19 +15,16 @@ namespace Server
     {
         static void Main(string[] args)
         {
-            int port = 4444;
+            int port = 5555;
 
-            string ipAddress = "127.0.0.100";
-
-
-            IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse(ipAddress), port);
+            IPEndPoint endPoint = new IPEndPoint(IPAddress.Loopback, port);
 
             using Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             
             SqlConnection conn = new SqlConnection();
 
             conn.ConnectionString =
-                "Data Source=STHQ0125-18;Initial Catalog=CarsDatabase;User ID=admin;Password=admin;";
+                "Data Source=condor\\SQLExpress;Initial Catalog=FavoriteMoviesDb;Integrated Security=True;";
 
             conn.Open();
 
@@ -44,7 +41,8 @@ namespace Server
                 {
                     var handler = socket.Accept();
 
-                    Task.Run(()=> {
+                    Task.Run(() =>
+                    {
                         while (true)
                         {
                             var strBuilder = new StringBuilder();
@@ -69,57 +67,62 @@ namespace Server
 
                             // get result with ado.net
 
-                          
+
                             var command = conn.CreateCommand();
 
                             command.CommandText = protocol.Query;
 
-                            if (protocol.SelectionMode)
+                            try
                             {
-                                var reader = command.ExecuteReader();
-
-                                var response = new ResponseProtocol();
-
-
-                                var columnNames = new Row();
-
-                                for (int i = 0, length = reader.FieldCount; i < length; i++)
+                                if (protocol.SelectionMode)
                                 {
+                                    var reader = command.ExecuteReader();
 
-                                    columnNames.Fields.Add(reader.GetName(i));
-                                }
+                                    var response = new ResponseProtocol();
 
-                                response.Rows.Add(columnNames);
 
-                                while (reader.Read())
-                                {
-                                    var row = new Row();
+                                    var columnNames = new Row();
 
                                     for (int i = 0, length = reader.FieldCount; i < length; i++)
                                     {
-                                        row.Fields.Add(reader.GetValue(i));
+
+                                        columnNames.Fields.Add(reader.GetName(i));
                                     }
 
-                                    response.Rows.Add(row);
+                                    response.Rows.Add(columnNames);
+
+                                    while (reader.Read())
+                                    {
+                                        var row = new Row();
+
+                                        for (int i = 0, length = reader.FieldCount; i < length; i++)
+                                        {
+                                            row.Fields.Add(reader.GetValue(i));
+                                        }
+
+                                        response.Rows.Add(row);
+                                    }
+
+                                    reader.Close();
+
+                                    var jsonStr = JsonConvert.SerializeObject(response);
+
+                                    handler.Send(Encoding.UTF8.GetBytes(jsonStr));
                                 }
+                                else
+                                {
+                                    command.ExecuteNonQuery();
 
-                                reader.Close();
-
-
-                                var jsonStr = JsonConvert.SerializeObject(response);
-
-                                handler.Send(Encoding.UTF8.GetBytes(jsonStr));
+                                    handler.Send(Encoding.UTF8.GetBytes("Query Executed"));
+                                }
                             }
-                            else
+                            catch (Exception e)
                             {
-                                command.ExecuteNonQuery();
-
-                                handler.Send(Encoding.UTF8.GetBytes("Query Executed"));
+                                Console.WriteLine(e.Message);
+                                handler.Send(Encoding.UTF8.GetBytes("Query is wrong."));
                             }
                         }
                     });
-
-                   
                 }
 
             }
@@ -137,7 +140,11 @@ namespace Server
 
                 Console.WriteLine($"Handled exception: {ex.Message}");
             }
-
+            finally
+            {
+                socket.Close();
+                conn.Close();
+            }
         }
     }
 }

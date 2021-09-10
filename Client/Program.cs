@@ -12,11 +12,9 @@ namespace Client
     {
         static void Main(string[] args)
         {
-            int port = 4444;
-
-            string ipAddress = "127.0.0.100";
-
-            IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse(ipAddress), port);
+            int port = 5555;
+            
+            IPEndPoint endPoint = new IPEndPoint(IPAddress.Loopback, port);
 
             using Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             
@@ -39,7 +37,7 @@ namespace Client
 
                     var protocol = new CommandProtocol();
 
-                    if (commandText.Contains("Select") && commandText.Count(c => c == ';') == 1)
+                    if (commandText.Contains("Select"))
                         protocol.SelectionMode = true;
 
                     protocol.Query = commandText;
